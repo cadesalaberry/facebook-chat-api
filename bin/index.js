@@ -1,14 +1,14 @@
 var request = require("request").defaults({jar: true});
 var cheerio = require("cheerio");
-var fs = require("fs");
 var time = require("./time");
+var fs = require("fs");
 
 function _get(url, jar, qs, callback) {
-  if(typeof qs === 'function') {
+  if (typeof qs === 'function') {
     callback = qs;
     qs = {};
   }
-  for(var prop in qs) {
+  for (var prop in qs) {
     if(typeof qs[prop] === "object") {
       console.log("You probably shouldn't pass an object inside the form at property", prop, qs);
       continue;
@@ -80,15 +80,21 @@ function _login(email, password, callback) {
     form.default_persistent = '1';
 
     console.log("Logging in...");
+
     _post("https://www.facebook.com/login.php?login_attempt=1", jar, form, function(err, res, html) {
       var cookies = res.headers['set-cookie'] || [];
 
+      // Stores the cookies in the jar
       cookies.map(function (c) {
         jar.setCookie(c, "https://www.facebook.com");
       });
 
-      if (!res.headers.location) return callback({error: "Wrong username/password."});
+      if (!res.headers.location) {
+        return callback({error: "Wrong username/password."});
+      }
+      
       _get(res.headers.location, jar, function(err, res, html) {
+        
         console.log("Logged in");
 
         var grammar_version = getFrom(html, "grammar_version\":\"", "\"");
@@ -96,9 +102,24 @@ function _login(email, password, callback) {
         // I swear, this is copy pasted from FB's minified code
         var clientid = (Math.random()*2147483648|0).toString(16);
         var starTime = Date.now();
-        var userId = jar.getCookies("https://www.facebook.com").filter(function(val) {
+
+        var fb_cookies = jar.getCookies("https://www.facebook.com");
+
+        var c_users = fb_cookies.filter(function(val) {
           return val.cookieString().split("=")[0] === "c_user";
-        })[0].cookieString().split("=")[1];
+        });
+
+        if (c_users.length == 0) {
+          console.log(c_users);
+          console.log('Unable to find a cookie with property "c_user"');
+          console.log('Do you have Login Notifications enabled ?');
+          console.log('If you do, check your Facebook notifications to authorize the login.');
+          console.log("Actually it won't help, working on fixing it.");
+          console.log(fb_cookies);
+          return;
+        }
+
+        var userId = c_users[0].cookieString().split("=")[1];
         var userChannel = "p_" + userId;
         var __rev = getFrom(html, "revision\":",",");
 
